@@ -42,6 +42,39 @@ def evaluate(model, loader, criterion, device):
             total += x.size(0)
     return total_loss / total, correct / total
 
+
+def compute_per_channel_accuracy(model, loader, device):
+    """Compute accuracy using only each individual channel (R,G,B) and all channels.
+
+    Returns dict: {'r': acc, 'g': acc, 'b': acc, 'all': acc}
+    """
+    model.eval()
+    totals = {'r': 0, 'g': 0, 'b': 0, 'all': 0}
+    rights = {'r': 0, 'g': 0, 'b': 0, 'all': 0}
+    with torch.no_grad():
+        for x, y in loader:
+            x = x.to(device)
+            y = y.to(device)
+            # all channels
+            out_all = model(x)
+            _, pred_all = out_all.max(1)
+            rights['all'] += pred_all.eq(y).sum().item()
+            totals['all'] += x.size(0)
+
+            # per channel: create input with only that channel
+            for idx, key in enumerate(['r', 'g', 'b']):
+                xc = x.clone()
+                for c in range(3):
+                    if c != idx:
+                        xc[:, c, :, :] = 0.0
+                out = model(xc)
+                _, pred = out.max(1)
+                rights[key] += pred.eq(y).sum().item()
+                totals[key] += x.size(0)
+
+    accs = {k: (rights[k] / totals[k] if totals[k] > 0 else 0.0) for k in totals}
+    return accs
+
 def map_weights_to_memristors(fc_weights, mem_model: MemristorModel):
     """Given list of FC weights (W,b), create G+ and G- arrays mapped from weights.
 

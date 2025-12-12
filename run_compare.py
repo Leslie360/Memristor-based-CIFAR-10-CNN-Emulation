@@ -11,7 +11,7 @@ import config
 from model import MemristorCNN
 from data_loader import get_cifar10_loaders
 from memristor_model import MemristorModel
-from train_memristor_cnn import train_one_epoch, evaluate, extract_fc_weights, map_weights_to_memristors
+from train_memristor_cnn import train_one_epoch, evaluate, extract_fc_weights, map_weights_to_memristors, compute_per_channel_accuracy
 
 def run_mode(mode, epochs=2, batch_size=32, device='cpu'):
     # local override of config for quick run
@@ -56,14 +56,19 @@ def run_mode(mode, epochs=2, batch_size=32, device='cpu'):
     Gn_layers = [m[1] for m in mapped]
 
     acc_log = {'train_acc': [], 'val_acc': []}
+    per_channel_history = []
+    pulse_history = []
     os.makedirs(cfg.EXPORT_DIR, exist_ok=True)
 
     for epoch in range(1, epochs+1):
         train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer, device)
         val_loss, val_acc = evaluate(model, test_loader, criterion, device)
+        per_channel_acc = compute_per_channel_accuracy(model, test_loader, device)
         print(f'[{mode}] Epoch {epoch}: train_acc={train_acc:.4f} val_acc={val_acc:.4f}')
+        print(f'  per-channel: R={per_channel_acc["r"]:.4f} G={per_channel_acc["g"]:.4f} B={per_channel_acc["b"]:.4f} ALL={per_channel_acc["all"]:.4f}')
         acc_log['train_acc'].append(train_acc)
         acc_log['val_acc'].append(val_acc)
+        per_channel_history.append(per_channel_acc)
 
         # get new fc weights and apply hardware writes based on delta
         new_fc = extract_fc_weights(model)
@@ -75,21 +80,49 @@ def run_mode(mode, epochs=2, batch_size=32, device='cpu'):
             norm = np.max(np.abs(W)) if W.size else 1.0
             deltaW_layers.append(dW / (norm + 1e-12))
 
-        # apply to memristor arrays
+        # apply to memristor arrays and accumulate pulse counts
+        epoch_pp = 0
+        epoch_pn = 0
         for li in range(len(Gp_layers)):
             Gp, Gn = Gp_layers[li], Gn_layers[li]
             dWn = deltaW_layers[li]
             Gp_new, Gn_new, pp, pn = mem_model.apply_weight_matrix_changes(Gp, Gn, dWn, color='r', mode=mode)
             Gp_layers[li] = Gp_new
             Gn_layers[li] = Gn_new
+            epoch_pp += int(pp)
+            epoch_pn += int(pn)
             # save snapshot
             np.save(os.path.join(cfg.EXPORT_DIR, f'compare_{mode}_epoch{epoch}_layer{li}_Gp.npy'), Gp_new)
             np.save(os.path.join(cfg.EXPORT_DIR, f'compare_{mode}_epoch{epoch}_layer{li}_Gn.npy'), Gn_new)
 
+        pulse_history.append({'epoch': epoch, 'pp': epoch_pp, 'pn': epoch_pn})
+
         fc_weights = new_fc
 
-    # save accuracy log
+    # save accuracy log and per-channel history
     np.save(os.path.join(cfg.EXPORT_DIR, f'compare_{mode}_acc.npy'), acc_log)
+    np.save(os.path.join(cfg.EXPORT_DIR, f'compare_{mode}_perchannel.npy'), np.array(per_channel_history, dtype=object))
+    # also write human-readable txt
+    txtp = os.path.join(cfg.EXPORT_DIR, f'results_{mode}.txt')
+    with open(txtp, 'w', encoding='utf-8') as f:
+        for e, val in enumerate(acc_log['val_acc'], 1):
+            f.write(f'Epoch {e}: val_acc={val:.4f}\n')
+            pc = per_channel_history[e-1]
+            f.write(f'  per_channel: R={pc["r"]:.4f} G={pc["g"]:.4f} B={pc["b"]:.4f} ALL={pc["all"]:.4f}\n')
+
+    # write CSV with epoch, train, val, R,G,B,ALL, pp, pn
+    import csv
+    csvp = os.path.join(cfg.EXPORT_DIR, f'results_{mode}.csv')
+    with open(csvp, 'w', newline='', encoding='utf-8') as cf:
+        writer = csv.writer(cf)
+        writer.writerow(['epoch', 'train_acc', 'val_acc', 'R', 'G', 'B', 'ALL', 'pp', 'pn'])
+        for e in range(1, len(acc_log['val_acc'])+1):
+            tr = acc_log['train_acc'][e-1]
+            va = acc_log['val_acc'][e-1]
+            pc = per_channel_history[e-1]
+            ph = pulse_history[e-1] if e-1 < len(pulse_history) else {'pp': 0, 'pn': 0}
+            writer.writerow([e, f'{tr:.6f}', f'{va:.6f}', f'{pc["r"]:.6f}', f'{pc["g"]:.6f}', f'{pc["b"]:.6f}', f'{pc["all"]:.6f}', ph['pp'], ph['pn']])
+
     return acc_log
 
 def main():

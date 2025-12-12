@@ -82,9 +82,63 @@ def plot_conductance_histograms():
         plt.close()
         print('Saved', out)
 
+
+def plot_per_channel():
+    modes = ['unidirectional', 'bidirectional']
+    for m in modes:
+        p = os.path.join(EXPORT_DIR, f'compare_{m}_perchannel.npy')
+        txt = os.path.join(EXPORT_DIR, f'results_{m}.txt')
+        if not os.path.exists(p):
+            continue
+        data = np.load(p, allow_pickle=True)
+        # data is array of dicts
+        # extract numeric values
+        def _val(d, k):
+            if isinstance(d, np.ndarray):
+                return d.item().get(k)
+            return d.get(k)
+
+        rs = [_val(d, 'r') for d in data]
+        gs = [_val(d, 'g') for d in data]
+        bs = [_val(d, 'b') for d in data]
+        alls = [_val(d, 'all') for d in data]
+        epochs = list(range(1, 1 + len(rs)))
+
+        # 2x2 grid
+        fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+        axes = axes.flatten()
+        axes[0].plot(epochs, rs, marker='o', color='r')
+        axes[0].set_title('R channel')
+        axes[1].plot(epochs, gs, marker='o', color='g')
+        axes[1].set_title('G channel')
+        axes[2].plot(epochs, bs, marker='o', color='b')
+        axes[2].set_title('B channel')
+        axes[3].plot(epochs, alls, marker='x', linestyle='--', color='k')
+        axes[3].set_title('All channels')
+
+        for ax in axes:
+            ax.set_xlabel('Epoch')
+            ax.set_ylabel('Accuracy')
+            ax.grid(True)
+
+        fig.suptitle(f'Per-channel accuracy ({m})')
+        out = os.path.join(PLOT_DIR, f'{m}_per_channel.png')
+        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+        fig.savefig(out, dpi=200)
+        plt.close(fig)
+        print('Saved', out)
+        # copy txt to plots for archiving
+        if os.path.exists(txt):
+            try:
+                import shutil
+                shutil.copy(txt, os.path.join(PLOT_DIR, f'results_{m}.txt'))
+            except Exception:
+                pass
+
 def main():
     plot_accuracy()
     plot_conductance_histograms()
+    plot_per_channel()
 
 if __name__ == '__main__':
     main()
