@@ -17,11 +17,8 @@ def _rgb_overlap_mix(img01: np.ndarray, overlap: float) -> np.ndarray:
     """
     img01: HxWx3 in [0,1]
     overlap: alpha in [0,1]
-    cfg.OVERLAP_ALPHA >1 可加强串扰；cfg.OVERLAP_GAMMA !=1 可增加非线性。
     """
     a = float(np.clip(overlap, 0.0, 1.0))
-    a *= float(getattr(cfg, "OVERLAP_ALPHA", 1.0))
-    a = float(np.clip(a, 0.0, 1.5))  # 允许轻微 >1 但裁剪
     r = img01[..., 0]
     g = img01[..., 1]
     b = img01[..., 2]
@@ -31,11 +28,7 @@ def _rgb_overlap_mix(img01: np.ndarray, overlap: float) -> np.ndarray:
     b2 = (1 - a) * b + a * (r + g) * 0.5
 
     out = np.stack([r2, g2, b2], axis=-1)
-    out = np.clip(out, 0.0, 1.0)
-    gamma = float(getattr(cfg, "OVERLAP_GAMMA", 1.0))
-    if gamma != 1.0:
-        out = np.power(out, gamma)
-    return out.astype(np.float32)
+    return np.clip(out, 0.0, 1.0).astype(np.float32)
 
 
 def preprocess_rgb_tensor(x: torch.Tensor, mode: str, bits: int, overlap: float) -> torch.Tensor:

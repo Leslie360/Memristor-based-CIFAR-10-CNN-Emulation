@@ -20,57 +20,45 @@ class Config:
     # Dataset / Train
     # =============================
     NUM_CLASSES = 10
-    BATCH_SIZE = 128           # memristor 版本收敛更快的一档 batch size
-    EPOCHS = 600               # 本轮 overlap 扫描统一跑 300 epoch
-    LR = 0.01
+    BATCH_SIZE = 64
+    EPOCHS = 100
+    LR = 0.001
     WEIGHT_DECAY = 5e-4
     NUM_WORKERS = 0
-
-    # Label smoothing to curb overfit / oscillation
-    LABEL_SMOOTHING = 0.05
 
     # CIFAR10 是否用单通道版本（如果你用的是 CHPDataset 三通道就 False）
     SINGLE_CHANNEL = False
 
-    # 输入量化 bit（data_loader 会用到）
+    # 输入量化 bit（你 data_loader 里会用到）
     BITS = 4
 
     # 优化器与调度
-    OPTIMIZER = "adamw"          # sgd | adam | adamw
-    LR_SCHED_TYPE = "cosine"     # step | cosine
+    OPTIMIZER = "adamw"   # sgd | adam | adamw
+    LR_SCHED_TYPE = "cosine"  # step | cosine
     LR_SCHED_STEP = 30
     LR_SCHED_GAMMA = 0.1
     LR_SCHED_TMAX = 100
 
-    # 模型变体：base / strong / resnet18（memristor FCL 需要 classifier，故默认 strong）
-    MODEL_VARIANT = "strong"
+    # 模型变体：base / strong / resnet18
+    MODEL_VARIANT = "resnet18"
 
     # 数据增强
     STRONG_AUG = True
 
     # =============================
-    # RGB preprocessing (train/test split)
+    # RGB pre-process (CH-P style)
     # =============================
-    # 训练：默认理想 4bit，无串扰
-    RGB_PRE_MODE_TRAIN = "4bit_ideal"
-    RGB_OVERLAP_TRAIN = 0.0
+    # 可选: "float" / "4bit_ideal" / "4bit_overlap"
+    RGB_PREPROCESS_MODE = "4bit_overlap"
 
-    # 测试：默认 4bit_overlap，可通过列表扫描多档串扰
-    RGB_PRE_MODE_TEST = "4bit_overlap"
-    RGB_OVERLAP_TEST = 0.0
+    # overlap 强度：0.0 表示理想分离；0.5 表示 50% overlap（论文对照常用）
+    RGB_OVERLAP = 0.25
 
-    # 扫描列表（test 用）
-    RGB_OVERLAP_LIST = [0,0.1,0.3,0.5]   # 论文关键档位
+    # 扫描用 overlap 列表（用于 run_compare 一键跑多条曲线）不需要循环就空集
+    RGB_OVERLAP_LIST = [0.0, 0.1, 0.3, 0.5]   # 先按论文最关键三档
 
-    # Overlap 模型增强：alpha>1 放大串扰，gamma!=1 加非线性
-    OVERLAP_ALPHA = 1.8   # >1 放大串扰；1.5 是加大退化的默认档
-    OVERLAP_GAMMA = 1.0
 
-    # 兼容旧字段（部分脚本仍读取 RGB_PREPROCESS_MODE / RGB_OVERLAP）
-    RGB_PREPROCESS_MODE = RGB_PRE_MODE_TEST
-    RGB_OVERLAP = RGB_OVERLAP_TEST
-
-    # 是否在 dataloader 启动时打印一条预处理配置（方便核对）
+    # 是否在 dataloader 启动时打印一条预处理配置（方便你核对）
     RGB_PREPROCESS_VERBOSE = True
 
     # =============================
@@ -93,9 +81,6 @@ class Config:
 
     # （默认 1；后续可改 3）
     MAX_PULSES_PER_STEP = 3
-    # mode-specific pulse caps（可覆盖 MAX_PULSES_PER_STEP）
-    BIDIR_MAX_PULSES = 3
-    UNIDIR_MAX_PULSES = 5
 
     # （你选的“平均曲线”）
     USE_AVG_CURVE = True
@@ -106,11 +91,6 @@ class Config:
     # 初始化策略：优先 match_float（把初始 float W 映射到差分态）
     #"match_float"| "midpoint"
     MEM_INIT = "match_float"            
-
-    # 量化映射缩放：S = S_base * MEM_SCALE_*，用来调节 mem 更新幅度
-    MEM_SCALE_DEFAULT = 1.0
-    BIDIR_MEM_SCALE = 1.0
-    UNIDIR_MEM_SCALE = 0.7
 
     # RGB 映射策略（当 color="auto" 时生效）
     # round_robin / blocks
@@ -125,5 +105,24 @@ class Config:
     # 权重可视化层配置
     WEIGHT_LAYER = "fc1"
     WEIGHT_NEURON_INDEX = 0
+
+    # =============================
+    # RGB preprocessing (train/test split)
+    # =============================
+    # 训练：固定 ideal（不串扰）
+    RGB_PRE_MODE_TRAIN = "4bit_ideal"
+    RGB_OVERLAP_TRAIN = 0.0
+
+    # 测试：用 overlap 扫描（串扰退化）
+    RGB_PRE_MODE_TEST = "4bit_overlap"
+    RGB_OVERLAP_TEST = 0.0
+
+    # 扫描列表（只用于 test）
+    RGB_OVERLAP_LIST = [0.0, 0.1, 0.3, 0.5]
+
+    # 量化位宽（RGB 4-bit）
+    BITS = 4
+
+
 
 cfg = Config()
